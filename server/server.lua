@@ -390,7 +390,7 @@ AddEventHandler('spawnPoliceUnitNet', function(wantedLevel, playerCoords, region
 
                     -- Add officer to table to return
                     table.insert(officers, pedNetID)
-
+                    
                     -- We spawned a ped into the vehicle, ensure vehicleCrewed is true.
                     vehicleCrewed = true
                 end
@@ -420,7 +420,7 @@ AddEventHandler('spawnPoliceUnitNet', function(wantedLevel, playerCoords, region
 
     
     -- Return the netIDs to the client
-    TriggerClientEvent('spawnPoliceUnitNetResponse', src, vehNetID, officers)
+    TriggerClientEvent('spawnPoliceUnitNetResponse', src, vehNetID, officers,wantedLevel)
     
 end)
 
@@ -833,7 +833,7 @@ AddEventHandler('fenix:server:trigger', function(pdata,alertData)
             print("Wanted Level for this location is " .. wantedlevel)
         else
             print("No wanted level for this locaiton found.. setting to 1")
-            wantedlevel = 0
+            wantedlevel = Config.DefaultWanted
         end 
 
         print("getting nearbyplayers")

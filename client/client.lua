@@ -48,11 +48,9 @@
 QBCore = exports['qb-core']:GetCoreObject()
 
 
-
-
 -- TABLES --
 -- Tables to keep track of spawned police units
-local spawnedVehicles = {} -- Table to store {vehicle = vehicle, officers = {driver = officer1, passenger = officer2...}, officerTasks = {}}
+local spawnedVehicles = {} -- Table to store  {vehicle = vehicle, officers = {driver = officer1, passenger = officer2...}, officerTasks = {}}
 local deadPeds = {} -- Table to store {officer = ped, timer = 0}
 local farOfficers = {} -- Table to store {officer = ped, timer = 0}
 
@@ -447,6 +445,17 @@ function GetPedsOutOfVehicle(vehicle)
     end
 end
 
+function SetBehaviour(officer, wantedLevel)
+    print('Set Behaviour' .. officer .. wantedLevel)
+    local level = math.min(wantedLevel, 3) -- clamp to max level in config
+    local configFunc = Config.wantedBehaviourLevels[level]
+    
+    if configFunc then
+        configFunc(officer)
+    else
+        print("No behavior config for wanted level: " .. tostring(wantedLevel))
+    end
+end
 
 
 
@@ -457,9 +466,6 @@ AddEventHandler('deleteSpawnedVehicleResponseStolen', function(vehNetID)
     stolenVehicles[vehNetID] = vehNetID
     if Config.isDebug then print('Added vehicle/heli/air ID ' .. vehNetID .. ' to stolenVehicles table ') end
 end)
-
-
-
 
 -- MAIN LOGIC --
 
@@ -546,7 +552,7 @@ AddEventHandler('spawnPoliceHeliNetResponse', function(vehNetID, officers)
                 SetPedAccuracy(officer, math.random(20, 30))     
             else
                 -- Process officers
-                SetPedCombatAttributes(officer, 2, true) -- Allow drive-by shooting.
+                SetPedCombatAttributes(officer, 2, false) -- Allow drive-by shooting.
                 SetPedAccuracy(officer, math.random(10, 20))
                 SetPedFiringPattern(officer, 0x5D60E4E0) -- Set firing pattern to single shot. 
             end
@@ -718,8 +724,8 @@ end
 
 -- This handles the response from the server after a vehicle and officers are spawned, so they can be tasked and otherwise handled by the client. 
 RegisterNetEvent('spawnPoliceUnitNetResponse')
-AddEventHandler('spawnPoliceUnitNetResponse', function(vehNetID, officers)
-
+AddEventHandler('spawnPoliceUnitNetResponse', function(vehNetID, officers,wantedLevel)
+    print('calling spwanpolice')
     local playerPed = PlayerPedId()
     local playerCoords = GetEntityCoords(playerPed)   
 
@@ -764,12 +770,24 @@ AddEventHandler('spawnPoliceUnitNetResponse', function(vehNetID, officers)
             SetEntityAsMissionEntity(officer, true, true) -- Prevent despawning by game garbage collection
 
             SetPedAsCop(officer, true)
-            SetPedCombatAttributes(officer, 2, true) -- Able to driveby
-            SetPedCombatAttributes(officer, 22, true) -- Drag injured peds to safety
+            print('Going to set behaviour')
+            SetBehaviour(officer, wantedLevel)
+            
+            --create an if statment that sets agressiveness based on wanted level
+            --eg 1 star, should try to arrest no shot
+            -- 2 star chase and stop not shoot from car
+            -- 3 shoot from car
+            -- 4 
+            -- should work on how existing officers can be changed as the wanted level changes
+            --[[
+            SetPedCombatAttributes(officer, 0, true) -- Able to driveby
+            SetPedCombatAttributes(officer, 1, true) -- Able to driveby
+            SetPedCombatAttributes(officer, 2, false) -- Able to driveby
+            SetPedCombatAttributes(officer, 22, false) -- Drag injured peds to safety
             SetPedAccuracy(officer, math.random(10, 30))
             SetPedFiringPattern(officer, 0xD6FF6D61) -- Set firing pattern to a more controlled burst. 
             SetPedGetOutUpsideDownVehicle(officer, true) 
-
+            --]]
             -- Set the driver to pursue the player
             if i == 1 then
                 TaskVehicleDriveToCoord(officer, vehicle, playerCoords.x, playerCoords.y, playerCoords.z, 30.0, 1, GetEntityModel(vehicle), 787004, 5.0, true)
@@ -796,6 +814,78 @@ AddEventHandler('spawnPoliceUnitNetResponse', function(vehNetID, officers)
 
 end)
 
+--[[
+To be used with SetPedCombatAttributes
+ID | Description
+0 | Use cover
+1 | Fight while in cover
+2 | Can do drive-bys (shoot from vehicles)
+3 | Always fight, never flee
+5 | Aggressive combat style
+6 | Can investigate dead bodies
+7 | Can use ranged weapons
+8 | Can use melee weapons
+9 | Will use grenade weapons
+10 | Will use smoke grenades
+11 | Can taunt in combat
+12 | Can charge (rush the enemy in melee)
+13 | Use cover intelligently
+14 | Blind fire from cover
+15 | Can flank enemy
+16 | Switch to more effective weapon
+17 | Can fight multiple enemies at once
+18 | Avoid friendly fire
+19 | Will look for last known enemy location
+20 | Can shoot at vehicles' tires
+21 | Shoot at targets from long range
+22 | Prefer drive-by shooting rather than exiting the vehicle
+23 | Can perform takedowns
+24 | Use burst fire instead of full auto
+25 | Use cover in vehicles
+26 | Can ambush enemies
+27 | Can block melee attacks
+28 | Will use stealth movement
+29 | Will NOT leave vehicle to fight
+30 | Avoid explosives in combat
+31 | Can vault obstacles while chasing
+32 | More likely to use mounted weapons
+33 | Can use stealth kill animations
+34 | Aim at head more often
+35 | Will seek out higher ground
+36 | Can react to nearby fights
+37 | Can enter vehicles to chase/fight
+38 | More accurate in vehicles
+39 | Don't leave vehicle even if shot at
+40 | Use explosive weapons (if available)
+41 | Don't use cover
+42 | Avoid close-range combat
+43 | Shoot at hostiles on foot while in vehicle
+44 | Attack enemies even while fleeing
+45 | Keep moving in combat
+46 | Can shoot from vehicle (similar to 2/22)
+47 | Only attack when certain of target
+48 | Don't retaliate
+49 | Stay behind allies
+50 | Engage enemies with stealth first
+51 | Panics under fire
+52 | Can use vehicle as weapon (ramming, aggressive driving)
+53 | Use mounted vehicle weapons
+54 | Take control of nearby mounted weapon
+55 | Prioritize enemy targets by threat
+56 | Engage targets who are out of sight
+57 | Disarm enemies when possible
+58 | Can call for backup
+59 | Can suppress enemy movement
+60 | Keep cover between them and enemies
+61 | Can initiate ambushes
+62 | Attack enemy vehicles directly
+63 | Use environment (e.g. explosive barrels)
+64 | More likely to surrender if overwhelmed
+65 | Less likely to surrender
+66 | Use distraction tactics
+85 | Prefer air targets over ground (useful for pilots)
+
+]]
 
 
 
@@ -1918,6 +2008,7 @@ end
 
 -- MAIN THREAD --
 -- Monitor the player's wanted level and maintain police units
+local lastWantedLevel = 0
 Citizen.CreateThread(function()
     local wantedTimer = 0
 
@@ -1939,7 +2030,20 @@ Citizen.CreateThread(function()
                 end
             end
 
-            
+            if wantedLevel ~= lastWantedLevel then
+                print("[WantedLevel] Changed from " .. lastWantedLevel .. " to " .. wantedLevel)
+                lastWantedLevel = wantedLevel
+
+                -- Trigger your AI/behavior logic here
+                for _, officerData in ipairs(farOfficers) do
+                    local officer = officerData.officer
+                    if DoesEntityExist(officer) then
+                        SetBehaviour(officer, wantedLevel)
+                    else
+                        print("[WantedLevel] Skipped officer - entity no longer exists")
+                    end
+                end
+            end    
 
             if QBCore.Functions.GetPlayerData().metadata['isdead'] or QBCore.Functions.GetPlayerData().metadata['inlaststand'] then
 

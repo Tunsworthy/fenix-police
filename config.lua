@@ -60,14 +60,14 @@ Config.AIResponse = {
 
 -- Define the evasion times for each wanted level (in milliseconds)
 Config.evasionTimes = {
-    [1] = 60000, -- 1 minute for wanted level 1
-    [2] = 90000, -- 1.5 minutes for wanted level 2
+    [1] = 120000, -- 1 minute for wanted level 1
+    [2] = 120000, -- 1.5 minutes for wanted level 2
     [3] = 120000, -- 2 minutes for wanted level 3
     [4] = 120000, -- 2 minutes for wanted level 4
     [5] = 150000  -- 2.5 minutes for wanted level 5
 }
 
-
+Config.DefaultWanted = 1
 
 
 ---------------------------------
@@ -675,5 +675,40 @@ Config.locations = {
     [120] = { vector3(253.25, 228.44, 101.68), type = 'big_bank', wanted = 5},
 }
 
+Config.wantedBehaviourLevels = {
+    [1] = function(officer)
+        SetPedCombatAttributes(officer, 46, false) -- Don't shoot from vehicle
+        SetPedCombatAttributes(officer, 2, false)  -- No drive-by
+        SetPedCombatAttributes(officer, 3, false)  -- Allow to flee
+        SetPedFleeAttributes(officer, 0, 0)        -- Don't flee from anything
+        SetPedSeeingRange(officer, 100.0)
+        SetPedHearingRange(officer, 100.0)
+        SetPedAlertness(officer, 3)
+    end,
+
+    [2] = function(officer)
+        -- Escalated behavior
+        SetPedCombatAttributes(officer, 46, false)
+        SetPedCombatAttributes(officer, 2, true)
+        SetPedCombatAttributes(officer, 3, false)
+        SetPedFleeAttributes(officer, 0, 0)
+        SetPedSeeingRange(officer, 120.0)
+        SetPedHearingRange(officer, 120.0)
+        SetPedAlertness(officer, 3)
+        SetPedAccuracy(officer, 25)
+    end,
+
+    [3] = function(officer)
+        -- More aggressive
+        SetPedCombatAttributes(officer, 46, true)
+        SetPedCombatAttributes(officer, 2, true)
+        SetPedCombatAttributes(officer, 3, false)
+        SetPedFleeAttributes(officer, 0, 0)
+        SetPedSeeingRange(officer, 150.0)
+        SetPedHearingRange(officer, 150.0)
+        SetPedAlertness(officer, 3)
+        SetPedAccuracy(officer, 40)
+    end
+}
 
 ------------------------
