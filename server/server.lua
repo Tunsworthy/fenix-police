@@ -850,3 +850,34 @@ AddEventHandler('fenix:server:trigger', function(pdata,alertData)
         end
     end  
 end)
+
+
+--added some commands to make testing a bit easier
+RegisterCommand("wanted_set", function(source, args)
+    local playerId = tonumber(args[1])
+    local wantedlevel = tonumber(args[2])
+    print("data passed".. args[1] .. args[2])
+    if wantedlevel then
+        TriggerClientEvent("fenix-police:client:SetWantedLevel", playerId, wantedlevel)
+    end
+end, true)
+
+RegisterCommand("wanted_remove", function(source, args)
+    local playerId = tonumber(args[1])
+    print("data passed".. args[1])
+    if playerId then
+        ClearPlayerWantedLevel(playerId)
+    end
+end, true)
+
+RegisterCommand("uncuff", function(source,args)
+    --local src = source
+    local playerId = tonumber(args[1])
+    local Player = QBCore.Functions.GetPlayer(playerId)
+
+    print('triggering event handcuffed for player' .. tostring(Player))
+    if Player then
+        Player.Functions.SetMetaData('ishandcuffed', isHandcuffed)
+    end
+    print(tostring(Player.PlayerData.metadata["ishandcuffed"]))
+end)

@@ -161,7 +161,8 @@ Config.minAirSpawnHeight = 150.0 -- This is the min height the spawn point for a
 -- This is the distance an officer operating a vehicle has to be from a player that is on foot before they get out to chase the player on foot.
 -- This means they will drive to the player and get within this distance before getting out. If it is too small they will not be able to get out
 -- and chase players that went down alley ways / into buildings. If it is too large they will get out too soon.
-Config.footChaseDistance = 30.0
+Config.footChaseDistance = 40.0
+Config.arrestDistance = 5 -- distance within which officer will attempt to arrest
 ---------------------
 
 

@@ -138,6 +138,8 @@ exports('SetWantedLevel', SetWantedLevel)
 RegisterNetEvent('fenix-police:client:SetWantedLevel', function(level)
     exports['fenix-police']:SetWantedLevel(level)
 end)
+
+
 -- Use this in other scripts by calling the function like below. 
 -- This allows you to set a wanted level from a script action that the normal GTA V code would not consider.
 -- For eg. a robery script, chop-shop script, car theft mission etc. might call this to set a wanted level.
@@ -1017,112 +1019,243 @@ local function maintainPoliceUnits(wantedLevel)
 
 end
 
+function WaitForEntity(getEntityFn, netID, maxWaits, waitTime)
+    local entity = getEntityFn(netID)
+    local waitCount = 0
 
+    while (not entity or entity == 0) and waitCount < maxWaits do
+        Wait(waitTime)
+        entity = getEntityFn(netID)
+        waitCount = waitCount + 1
+    end
+
+    return entity
+end
 
 
 -- Function to handle police foot chase and vehicle retrieval
 local function handleChaseBehavior(vehicleData, playerPed, vehNetID)
     local playerCoords = GetEntityCoords(playerPed)
     local vehicle = NetToVeh(vehNetID) 
-        
-    -- I've found that one call isn't enough, and it can take multiple NetToVeh calls before it is not nil or == 0 regardless of the time that has passed since spawn. 
-    local waitCount = 0
-    while (not vehicle or vehicle == 0) and waitCount < Config.controlWaitCount do
-        vehicle = NetToVeh(vehNetID)
-        Wait(Config.netWaitTime)
-        waitCount = waitCount + 1
-    end
+    local playerinvehicle = IsPedInAnyVehicle(playerPed, false) --True if the player is in a Vehicle
+    local Player = QBCore.Functions.GetPlayerData()
+    -- Check if the player is handcuffed
+    local isCuffed = Player.metadata.ishandcuffed
+    local playerHandsUp = IsEntityPlayingAnim(playerPed, 'missminuteman_1ig_2', 'handsup_base', 3)
 
+       
+
+
+    -- I've found that one call isn't enough, and it can take multiple NetToVeh calls before it is not nil or == 0 regardless of the time that has passed since spawn. 
+    -- replaced with function if it works codeblock will be removed
+    local vehicle = WaitForEntity(NetToVeh, vehNetID, Config.controlWaitCount, Config.netWaitTime)
+    --[[
+        local waitCount = 0
+        while (not vehicle or vehicle == 0) and waitCount < Config.controlWaitCount do
+            vehicle = NetToVeh(vehNetID)
+            Wait(Config.netWaitTime)
+            waitCount = waitCount + 1
+        end
+    ]]
     if (not vehicle or vehicle == 0) then
         if Config.isDebug then print('HandleChase vehicle ID ' .. vehNetID .. ' NetToVeh still nil or 0, gave up ') end
     end
 
+
+
     for pedNetID, officerData in pairs(vehicleData.officers) do
+        local officer = WaitForEntity(NetToPed, pedNetID, Config.controlWaitCount, Config.netWaitTime)
         local officer = NetToPed(pedNetID) 
+        local officerVehicle = IsPedInAnyVehicle(officer, false)
+        local officerisdriver =  GetPedInVehicleSeat(GetVehiclePedIsIn(officer), -1)
+        local taskStatus = spawnedVehicles[vehNetID].officerTasks[pedNetID]
+        
 
-        -- I've found that one call isn't enough, and it can take multiple NetToPed calls before it is not nil or == 0 regardless of the time that has passed since spawn. 
-        local waitCount = 0
-        while (not officer or officer == 0) and waitCount < Config.controlWaitCount do
-            officer = NetToPed(pedNetID)
-            Wait(Config.netWaitTime)
-            waitCount = waitCount + 1
-        end
-
+        
+        --If the Entity doesn't exist we want to end the check here - there is no need for the else
         if not DoesEntityExist(officer) or officer == 0 then
             if Config.isDebug then print('HandleChase ped ID ' .. pedNetID .. ' NetToPed still nil or 0, gave up ') end
-        else
-            local officerCoords = GetEntityCoords(officer)
-            local distance = Vdist(playerCoords.x, playerCoords.y, playerCoords.z, officerCoords.x, officerCoords.y, officerCoords.z)
-
-            --Equivalent to checkDeadPeds but for farPeds, done here to leverage distance check
-            if distance > Config.officerTooFarDistance then
-                if farOfficers[pedNetID] then
-                    farOfficers[pedNetID].timer = farOfficers[pedNetID].timer + 1
-                else
-                    farOfficers[pedNetID] = { officer = officer, timer = 0 }
-                end
-            else
-                farOfficers[pedNetID] = nil
-            end
-
-            if IsPedInAnyVehicle(playerPed, false) then
-                -- Player is in a vehicle
-                if IsPedInAnyVehicle(officer, false) then
-                    if GetPedInVehicleSeat(GetVehiclePedIsIn(officer), -1) == officer then 
-                        local taskStatus = spawnedVehicles[vehNetID].officerTasks[pedNetID]
-                        if taskStatus ~= 'VehicleChase' then  
-                            TaskVehicleChase(officer, playerPed)
-                            SetTaskVehicleChaseBehaviorFlag(officer, 8, true) -- Turn on boxing and PIT behavior
-                            spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'VehicleChase'
-                        end
-                    else
-                        local taskStatus = spawnedVehicles[vehNetID].officerTasks[pedNetID]
-                        if taskStatus ~= 'CombatPed' then  
-                            TaskCombatPed(officer, playerPed, 0, 16)
-                            spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'CombatPed'
-                        end    
-                    end
-                else
-                    local nearbyVehicle = QBCore.Functions.GetClosestVehicle(vector3(officerCoords.x, officerCoords.y, officerCoords.z), 100, false)
-                    if nearbyVehicle then
-                        local taskStatus = spawnedVehicles[vehNetID].officerTasks[pedNetID] -- Only call task once to avoid interrupting peds repeatedly
-                        if taskStatus ~= 'EnterVehicle' then  
-                            TaskEnterVehicle(officer, nearbyVehicle, 20000, -1, 1.5, 8, 0)
-                            spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'EnterVehicle'
-                        end
-                    end
-                end
-            else
-                -- Player is on foot
-                if distance > Config.footChaseDistance then
-                    if IsPedInAnyVehicle(officer, false) then
-                        if GetPedInVehicleSeat(GetVehiclePedIsIn(officer), -1) == officer then 
-                            local taskStatus = spawnedVehicles[vehNetID].officerTasks[pedNetID]
-                            if taskStatus ~= 'VehicleChase' then  
-                                TaskVehicleChase(officer, playerPed)
-                                SetTaskVehicleChaseBehaviorFlag(officer, 8, true) -- Turn on boxing and PIT behavior
-                                spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'VehicleChase'
-                            end
-                        else
-                            local taskStatus = spawnedVehicles[vehNetID].officerTasks[pedNetID]
-                            if taskStatus ~= 'CombatPed' then  
-                                TaskCombatPed(officer, playerPed, 0, 16)
-                                spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'CombatPed'
-                            end    
-                        end
-                    end
-                else
-                    local taskStatus = spawnedVehicles[vehNetID].officerTasks[pedNetID]
-                    if taskStatus ~= 'CombatPed' then  
-                        TaskGoToEntity(officer, playerPed, -1, 5.0, 2.0, 1073741824, 0)
-                        TaskCombatPed(officer, playerPed, 0, 16)
-                        spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'CombatPed'
-                    end      
-                end
-            end
+            return
         end
+        
+        
+        --Start to look at what the officer is doing
+        local officerCoords = GetEntityCoords(officer)
+        local distance = Vdist(playerCoords.x, playerCoords.y, playerCoords.z, officerCoords.x, officerCoords.y, officerCoords.z)
+        local nearbyVehicle = QBCore.Functions.GetClosestVehicle(vector3(officerCoords.x, officerCoords.y, officerCoords.z), 100, false)
+        local officerNearPlayer = distance <= Config.footChaseDistance
+        local officerFarPlayer = distance >= Config.footChaseDistance
+        local officerArrestPlayerdistance = distance <= Config.arrestDistance
+        
+        --print("distance to player: " .. distance)
+        print("player in vehicle: " .. tostring(playerinvehicle) .. " Officer in vehicle: " .. tostring(officerVehicle) .. " Officer near player: " .. tostring(officerNearPlayer) .. " PlayerCuffed: " .. tostring(isCuffed) .. " Officer Arrest Distance: " .. tostring(officerArrestPlayerdistance) .. " Current Task: " .. tostring(taskStatus))
+
+
+        --Equivalent to checkDeadPeds but for farPeds, done here to leverage distance check
+        if distance > Config.officerTooFarDistance then
+            if farOfficers[pedNetID] then
+                farOfficers[pedNetID].timer = farOfficers[pedNetID].timer + 1
+            else
+                farOfficers[pedNetID] = { officer = officer, timer = 0 }
+            end
+        else
+            farOfficers[pedNetID] = nil
+        end
+            --Update this logic to make it a bit cleaner by using and
+            --[[
+                playerinvehicle
+               local officer = NetToPed(pedNetID) 
+                local officervehicle = IsPedInAnyVehicle(officer, false)
+                local officerisdriver =  GetPedInVehicleSeat(GetVehiclePedIsIn(officer), -1)
+                local taskStatus = spawnedVehicles[vehNetID].officerTasks[pedNetID]
+                local nearbyVehicle = QBCore.Functions.GetClosestVehicle(vector3(officerCoords.x, officerCoords.y, officerCoords.z), 100, false)
+
+                1) If Player and offcier and in vehicle and offcier is driver = Chase
+                2) If Player and offcier and in vehicle and offcier is passanger = CombatPed
+                3) If player is in vehicle but officer isn't, officer should get enter a Vehicle
+                4) If Player isn't in vehicle and offier is and officer is within footchase - officer should get out of vehicle and chase
+                5) if player isn't in vehicle and offier isn't and officer is withing footchase - chase
+                6) if player isn't in vehicle and officer isn't and officer is in arrest distance - arrest
+                
+            ]]
+            --If player and officer is driver are in a vehicle and chase isn't already set
+        if playerinvehicle and officerVehicle and officerisdriver and taskStatus ~= 'VehicleChase' then
+            Print("Called VehicleChase")
+            TaskVehicleChase(officer, playerPed)
+            SetTaskVehicleChaseBehaviorFlag(officer, 8, true) -- Turn on boxing and PIT behavior
+            spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'VehicleChase'
+            return
+        end 
+
+        --If player and officer is not driver are in vehicle - set combat ped - if it's not already set
+        if playerinvehicle and officerVehicle and not officerisdriver and taskStatus ~= 'CombatPed' then
+            Print("Called passanger VehicleChase")
+            TaskCombatPed(officer, playerPed, 0, 0)
+            spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'CombatPed'
+            return
+        end
+
+            --If player is in vehicle but officer isn't, officer should get enter a Vehicle
+        if playerinvehicle and not officerVehicle and nearbyVehicle and taskStatus ~= 'EnterVehicle' then
+            Print("Called passanger Get in Vehicle")
+            if GetPedInVehicleSeat(nearbyVehicle, -1) ~= 0 then
+                -- Driver's seat is occupied, enter as passenger
+                TaskEnterVehicle(officer, nearbyVehicle, 20000, 0, 1.5, 8, 0)  -- Seat 0 = front passenger
+            else
+                -- Driver's seat is free
+                TaskEnterVehicle(officer, nearbyVehicle, 20000, -1, 1.5, 8, 0)
+            end
+            spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'EnterVehicle'
+            return
+        end
+            
+        -- 4) If Player isn't in vehicle and offier and is driver is and officer is not in footchase range 
+        if not playerinvehicle and officerVehicle and officerisdriver and officerFarPlayer and taskStatus ~= 'VehicleChase' then
+            print("Called VehicleChase - player out of vehicle")
+            TaskVehicleChase(officer, playerPed)
+            SetTaskVehicleChaseBehaviorFlag(officer, 8, true) -- Turn on boxing and PIT behavior
+            spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'VehicleChase'
+            return
+        end
+
+        -- 4) If Player isn't in vehicle and offier and is not driver is and officer is not in footchase range 
+        if not playerinvehicle and officerVehicle and not officerisdriver and officerFarPlayer and taskStatus ~= 'CombatPed' then
+            print("Called CombatPed - 4")
+            TaskCombatPed(officer, playerPed, 0, 0 + 64 + 2048)
+            spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'CombatPed'
+            return
+        end        
+        
+        -- 4a) If Player isn't in vehicle and offier is but is within footchase - get out of car and chase
+        if not playerinvehicle and officerVehicle and officerNearPlayer and taskStatus ~= '4a' and not isCuffed then
+            print("Called CombatPed - 4a")
+            ClearPedTasks(officer)
+            RemoveAllPedWeapons(officer, true)
+            SetCurrentPedWeapon(officer, `WEAPON_UNARMED`, true)
+            TaskLeaveVehicle(officer, GetVehiclePedIsIn(officer, false), 256) -- 256 = leave vehicle flag
+            spawnedVehicles[vehNetID].officerTasks[pedNetID] = '4a'
+            return
+        end 
+
+        -- 5a) If player is NOT cuffed, chase and arrest
+        if not isCuffed and not playerinvehicle and not officerVehicle and officerArrestPlayerdistance and taskStatus ~= 'AttemptArrest' then
+            print("Called 5a")
+            
+            ClearPedTasksImmediately(officer)
+            RemoveAllPedWeapons(officer, true)
+            SetCurrentPedWeapon(officer, `WEAPON_UNARMED`, true)
+            TaskGoToEntity(officer, playerPed, -1, 1.5, 2.0, 1073741824, 0)
+
+            SetTimeout(1000, function()
+                TriggerEvent('police:client:TryArrestPlayer', officer, playerPed)
+                ClearPedTasks(officer)
+                TaskStandStill(officer, -1)
+            end)
+
+            spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'AttemptArrest'
+            return
+        end
+
+        -- 5b If player IS cuffed, no more attacking, take to car
+        if isCuffed and officerNearPlayer and not playerinvehicle and taskStatus == 'AttemptArrest' then
+            print("Called 5b")
+
+            ClearPedTasksImmediately(officer)
+            RemoveAllPedWeapons(officer, true)
+            SetCurrentPedWeapon(officer, `WEAPON_UNARMED`, true)
+
+            -- Make officer go to the player
+            TaskGoToEntity(officer, playerPed, -1, 1.5, 2.0, 1073741824, 0)
+
+            -- Wait a little to let the officer reach the player (optional, you could use distance check instead)
+            SetTimeout(2000, function()
+                -- Attach officer to player (small offset)
+                AttachEntityToEntity(officer, playerPed, 0, 0.5, 0.5, 0.0, 0.0, 0.0, 180.0, false, false, false, false, 2, true)
+
+                -- Freeze both peds so they "stand still"
+                FreezeEntityPosition(officer, true)
+                FreezeEntityPosition(playerPed, true)
+
+                -- After 2 minutes (120000ms)
+                SetTimeout(120000, function()
+                    -- Uncuff the player
+                    TriggerEvent('police:client:TryArrestPlayer', officer, playerPed) -- <-- make sure you have an uncuff event
+
+                    -- Detach officer
+                    DetachEntity(officer, true, true)
+
+                    -- Unfreeze both
+                    FreezeEntityPosition(officer, false)
+                    FreezeEntityPosition(playerPed, false)
+
+                    -- Drop player's wanted level
+                    ClearPlayerWantedLevel(PlayerId())
+
+                    print("Player uncuffed and wanted level cleared")
+                end)
+            end)
+
+            spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'EscortCuffedPlayer'
+            return
+        end
+
+
+        
+
     end
 end
+
+RegisterNetEvent('police:client:TryArrestPlayer', function(officer, playerPed)
+    local playerPed = PlayerPedId()  -- This gets the player's Ped (character) ID
+    local playerId = GetPlayerServerId(PlayerId())  -- Get the player's server ID
+    
+    if #(GetEntityCoords(officer) - GetEntityCoords(playerPed)) <= Config.arrestDistance then
+        print("[ARREST] Officer is arresting the player")
+        -- Simulate the officer performing the cuff
+        -- This is the same event that gets triggered when you press 'E' near a player in qb-policejob
+        TriggerEvent('police:client:GetCuffed', playerId)
+    end
+end)
 
 
 
