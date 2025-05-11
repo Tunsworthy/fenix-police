@@ -60,7 +60,7 @@ Config.AIResponse = {
 
 -- Define the evasion times for each wanted level (in milliseconds)
 Config.evasionTimes = {
-    [1] = 120000, -- 1 minute for wanted level 1
+    [1] = 60000, -- 1 minute for wanted level 1
     [2] = 120000, -- 1.5 minutes for wanted level 2
     [3] = 120000, -- 2 minutes for wanted level 3
     [4] = 120000, -- 2 minutes for wanted level 4
@@ -162,7 +162,7 @@ Config.minAirSpawnHeight = 150.0 -- This is the min height the spawn point for a
 -- This means they will drive to the player and get within this distance before getting out. If it is too small they will not be able to get out
 -- and chase players that went down alley ways / into buildings. If it is too large they will get out too soon.
 Config.footChaseDistance = 40.0
-Config.arrestDistance = 5 -- distance within which officer will attempt to arrest
+Config.arrestDistance = 1.5 -- distance within which officer will attempt to arrest
 ---------------------
 
 

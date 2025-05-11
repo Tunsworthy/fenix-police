@@ -1049,29 +1049,18 @@ local function handleChaseBehavior(vehicleData, playerPed, vehNetID)
     -- I've found that one call isn't enough, and it can take multiple NetToVeh calls before it is not nil or == 0 regardless of the time that has passed since spawn. 
     -- replaced with function if it works codeblock will be removed
     local vehicle = WaitForEntity(NetToVeh, vehNetID, Config.controlWaitCount, Config.netWaitTime)
-    --[[
-        local waitCount = 0
-        while (not vehicle or vehicle == 0) and waitCount < Config.controlWaitCount do
-            vehicle = NetToVeh(vehNetID)
-            Wait(Config.netWaitTime)
-            waitCount = waitCount + 1
-        end
-    ]]
+
     if (not vehicle or vehicle == 0) then
         if Config.isDebug then print('HandleChase vehicle ID ' .. vehNetID .. ' NetToVeh still nil or 0, gave up ') end
     end
 
-
-
     for pedNetID, officerData in pairs(vehicleData.officers) do
         local officer = WaitForEntity(NetToPed, pedNetID, Config.controlWaitCount, Config.netWaitTime)
-        local officer = NetToPed(pedNetID) 
+        --local officer = NetToPed(pedNetID) 
         local officerVehicle = IsPedInAnyVehicle(officer, false)
         local officerisdriver =  GetPedInVehicleSeat(GetVehiclePedIsIn(officer), -1)
         local taskStatus = spawnedVehicles[vehNetID].officerTasks[pedNetID]
-        
 
-        
         --If the Entity doesn't exist we want to end the check here - there is no need for the else
         if not DoesEntityExist(officer) or officer == 0 then
             if Config.isDebug then print('HandleChase ped ID ' .. pedNetID .. ' NetToPed still nil or 0, gave up ') end
@@ -1086,9 +1075,10 @@ local function handleChaseBehavior(vehicleData, playerPed, vehNetID)
         local officerNearPlayer = distance <= Config.footChaseDistance
         local officerFarPlayer = distance >= Config.footChaseDistance
         local officerArrestPlayerdistance = distance <= Config.arrestDistance
-        
+        local officecanseeplaer = HasEntityClearLosToEntity(officer, playerPed, 17)
+
         --print("distance to player: " .. distance)
-        print("player in vehicle: " .. tostring(playerinvehicle) .. " Officer in vehicle: " .. tostring(officerVehicle) .. " Officer near player: " .. tostring(officerNearPlayer) .. " PlayerCuffed: " .. tostring(isCuffed) .. " Officer Arrest Distance: " .. tostring(officerArrestPlayerdistance) .. " Current Task: " .. tostring(taskStatus))
+        print("player in vehicle: " .. tostring(playerinvehicle) .. " Officer in vehicle: " .. tostring(officerVehicle) .. " Officer near player: " .. tostring(officerNearPlayer) .. " PlayerCuffed: " .. tostring(isCuffed) .. " Officer Arrest Distance: " .. tostring(officerArrestPlayerdistance) .. " Current Task: " .. tostring(taskStatus) .. " Can see player: ".. tostring(officecanseeplaer))
 
 
         --Equivalent to checkDeadPeds but for farPeds, done here to leverage distance check
@@ -1119,8 +1109,18 @@ local function handleChaseBehavior(vehicleData, playerPed, vehNetID)
                 
             ]]
             --If player and officer is driver are in a vehicle and chase isn't already set
+        if taskStatus == 'DriveToCoord' and not officecanseeplaer then
+            print("Officer driving to Coordinates and cannot see player")
+            return
+        end
+
+        if taskStatus == 'None' and not officecanseeplaer then
+            print("Officer driving to Coordinates and cannot see player")
+            return
+        end
+            
         if playerinvehicle and officerVehicle and officerisdriver and taskStatus ~= 'VehicleChase' then
-            Print("Called VehicleChase")
+            print("Called VehicleChase")
             TaskVehicleChase(officer, playerPed)
             SetTaskVehicleChaseBehaviorFlag(officer, 8, true) -- Turn on boxing and PIT behavior
             spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'VehicleChase'
@@ -1129,7 +1129,7 @@ local function handleChaseBehavior(vehicleData, playerPed, vehNetID)
 
         --If player and officer is not driver are in vehicle - set combat ped - if it's not already set
         if playerinvehicle and officerVehicle and not officerisdriver and taskStatus ~= 'CombatPed' then
-            Print("Called passanger VehicleChase")
+            print("Called passanger VehicleChase")
             TaskCombatPed(officer, playerPed, 0, 0)
             spawnedVehicles[vehNetID].officerTasks[pedNetID] = 'CombatPed'
             return
@@ -1137,7 +1137,7 @@ local function handleChaseBehavior(vehicleData, playerPed, vehNetID)
 
             --If player is in vehicle but officer isn't, officer should get enter a Vehicle
         if playerinvehicle and not officerVehicle and nearbyVehicle and taskStatus ~= 'EnterVehicle' then
-            Print("Called passanger Get in Vehicle")
+            print("Called passanger Get in Vehicle")
             if GetPedInVehicleSeat(nearbyVehicle, -1) ~= 0 then
                 -- Driver's seat is occupied, enter as passenger
                 TaskEnterVehicle(officer, nearbyVehicle, 20000, 0, 1.5, 8, 0)  -- Seat 0 = front passenger
@@ -2142,6 +2142,7 @@ end
 -- MAIN THREAD --
 -- Monitor the player's wanted level and maintain police units
 local lastWantedLevel = 0
+local PlayerkillCount = 0
 Citizen.CreateThread(function()
     local wantedTimer = 0
 
@@ -2150,6 +2151,7 @@ Citizen.CreateThread(function()
 
         Citizen.Wait(Config.scriptFrequency)
         local playerPed = PlayerPedId()
+        local playerId = PlayerId()
         local wantedLevel = GetPlayerWantedLevel(PlayerId())
         
         if wantedLevel > 0 then
@@ -2210,7 +2212,9 @@ Citizen.CreateThread(function()
                 maintainPoliceUnits(wantedLevel) -- Checks if we need to spawn more units, or remove excess units.
                 checkDeadPeds() -- Check for dead peds
                 handleDeadPeds() -- Handle the deletion of dead peds.
-                handleFarPeds() -- Handle the deletion of far peds. 
+                --handleFarPeds() -- Handle the deletion of far peds.
+                local score = CalculateAggressionScore(PlayerPedId())
+                print("Aggression Score: " .. score)
 
                 for vehNetID, vehicleData in pairs(spawnedVehicles) do
                     handleChaseBehavior(vehicleData, playerPed, vehNetID) -- Handles starting foot pursuits, or getting back into vehicles
@@ -2243,6 +2247,69 @@ Citizen.CreateThread(function()
     end
 end)
 
+--This functions gives the player a rating of agrresion - this will determin how the police behvaiour
+local aggressionScore = 0
+local lastKillTime = 0
+
+function CalculateAggressionScore(playerPed)
+    local score = 0
+
+    -- If hands up or surrendering (you need to define this logic)
+    if IsPedHandsUp and IsPedHandsUp(playerPed) then
+        score = score - 50
+    end
+
+    -- Weapon in hand
+    local weapon = GetSelectedPedWeapon(playerPed)
+    if weapon ~= `WEAPON_UNARMED` then
+        if IsPedArmed(playerPed, 1) then
+            score = score + 10 -- melee
+        elseif IsPedArmed(playerPed, 6) then
+            score = score + 30 -- firearm
+        end
+    end
+
+    -- Aiming or targeting
+    if IsPlayerFreeAiming(PlayerId()) or IsPlayerTargettingAnything(PlayerId()) then
+        score = score + 20
+    end
+
+    -- Shooting
+    if IsPedShooting(playerPed) then
+        score = score + 50
+    end
+
+    -- Count kills using decorators or another system you track manually
+    local currentTime = GetGameTimer()
+    if lastKillTime ~= 0 and (currentTime - lastKillTime) < 30000 then -- 30 seconds
+        score = score + 100
+    end
+
+    -- Vehicle aggression
+    if IsPedInAnyVehicle(playerPed, false) and IsVehicleDriveable(GetVehiclePedIsIn(playerPed, false), false) then
+        local speed = GetEntitySpeed(GetVehiclePedIsIn(playerPed, false)) * 3.6 -- m/s to km/h
+        if speed > 60.0 then
+            score = score + 10
+        end
+    end
+
+    -- Cap and update global score
+    score = math.max(0, math.min(1000, score))
+    aggressionScore = score
+
+    return score
+end
+
+-- Example hook to track a kill
+AddEventHandler("gameEventTriggered", function(name, args)
+    if name == "CEventNetworkEntityDamage" then
+        local victim = args[1]
+        local attacker = args[2]
+        if attacker == PlayerPedId() and IsPedAPlayer(victim) == false then
+            lastKillTime = GetGameTimer()
+        end
+    end
+end)
 
 
 
